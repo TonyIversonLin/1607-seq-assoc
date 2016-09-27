@@ -49,13 +49,29 @@ db.sync({force: true})
     .then(() => {
         return Promise.map(housesRaw, house => House.create(house));
     })
-    .then(() => {
-        return Promise.map(usersRaw, user => User.create(user));
+    .then((createdHouses) => {
+        const usersWithHouse = usersRaw.map(u => Object.assign(u, { houseId: _.sample(createdHouses).id }));
+        const bathroomsWithHouse = bathroomsRaw.map(b => Object.assign(b, { houseId: _.sample(createdHouses).id }));
+        return Promise.all([
+            Promise.map(usersWithHouse, user => User.create(user)),
+            Promise.map(bathroomsWithHouse, bathroom => Bathroom.create(bathroom))
+        ]);
+    })
+    .spread((createdUsers, createdBathrooms) => {
+
+        const showersWithBathroom = showersRaw.map(shower => Object.assign(shower, { bathroomId: _.sample(createdBathrooms).id }));
+
+        return Promise.map(showersWithBathroom, shower => Shower.create(shower))
+            .then(createdShowers => {
+                return Promise.map(createdShowers, createdShower => {
+                    const size = Math.random() > .2 ? 1 : 2;
+                    const randomUsers = _.sampleSize(createdUsers, size).map(u => u.id);
+                    return createdShower.setUsers(randomUsers);
+                })
+            });
     })
     .then(() => {
-        return Promise.map(bathroomsRaw, bathroom => Bathroom.create(bathroom));
-    })
-    .then(() => {
-        return Promise.map(showersRaw, shower => Shower.create(shower));
+        console.log('Done!');
+        process.kill(0);
     })
     .catch(console.error);
