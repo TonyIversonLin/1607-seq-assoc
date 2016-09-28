@@ -12,13 +12,19 @@ const createRawData = (amount, fields, fakerMethods) => {
     const fieldAndFaker = _.zip(fields, fakerMethods);
 
     return _.range(0, amount).map(() => {
-        return fieldAndFaker.reduce((rawObj, fieldDef) => {
-            const [fakerProp, fakerMethod] = fieldDef[1].split('.');
-            rawObj[fieldDef[0]] = faker[fakerProp][fakerMethod]();
+        return fieldAndFaker.reduce((rawObj, [field, fakerProps]) => {
+            const [fakerProp, fakerMethod] = fakerProps.split('.');
+            rawObj[field] = faker[fakerProp][fakerMethod]();
             return rawObj;
         }, {});
     });
 
+};
+
+Array.prototype.mapMerge = function (fnProducesMergeObject) {
+    return this.map(e => {
+        return Object.assign({}, e, fnProducesMergeObject());
+    })
 };
 
 const usersRaw = createRawData(
@@ -47,21 +53,21 @@ const bathroomsRaw = createRawData(
 
 db.sync({force: true})
     .then(() => {
-        return Promise.map(housesRaw, house => House.create(house));
+        return Promise.map(housesRaw, House.create.bind(House));
     })
     .then((createdHouses) => {
-        const usersWithHouse = usersRaw.map(u => Object.assign(u, { houseId: _.sample(createdHouses).id }));
-        const bathroomsWithHouse = bathroomsRaw.map(b => Object.assign(b, { houseId: _.sample(createdHouses).id }));
+        const usersWithHouse = usersRaw.mapMerge(() => ({ houseId: _.sample(createdHouses).id }));
+        const bathroomsWithHouse = bathroomsRaw.mapMerge(() => ({ houseId: _.sample(createdHouses).id }));
         return Promise.all([
-            Promise.map(usersWithHouse, user => User.create(user)),
-            Promise.map(bathroomsWithHouse, bathroom => Bathroom.create(bathroom))
+            Promise.map(usersWithHouse, User.create.bind(User)),
+            Promise.map(bathroomsWithHouse, Bathroom.create.bind(Bathroom))
         ]);
     })
     .spread((createdUsers, createdBathrooms) => {
 
-        const showersWithBathroom = showersRaw.map(shower => Object.assign(shower, { bathroomId: _.sample(createdBathrooms).id }));
+        const showersWithBathroom = showersRaw.mapMerge(() => ({ bathroomId: _.sample(createdBathrooms).id }));
 
-        return Promise.map(showersWithBathroom, shower => Shower.create(shower))
+        return Promise.map(showersWithBathroom, Shower.create.bind(Shower))
             .then(createdShowers => {
                 return Promise.map(createdShowers, createdShower => {
                     const size = Math.random() > .2 ? 1 : 2;
